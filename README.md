@@ -8,7 +8,7 @@ Copy the `CampfireTales` folder into `World of Warcraft/_forever_/Interface/AddO
 If the addon shows as "out of date", either tick **Load out of date AddOns** or change `## Interface:` in `CampfireTales.toc` to your client's version (`/dump select(4, GetBuildInfo())` prints it).
 
 ## When a story starts
-- By default, when you gain **Cozy Fire** (spell ID 7353), the buff from standing by a Basic Campfire. The story is spread evenly over the time left on that buff (about 1 minute).
+- By default, when you gain the campfire buff with spell ID **1289723**. The story is spread evenly over the time left on that buff (about 1 minute).
 - In a party, the story goes to party chat. Solo, only you see it. (`/campfire channel AUTO`, the default.)
 - Want sitting to start it as well? `/campfire trigger ANY` (or `SIT` for sitting only). Sit-started stories use `/campfire delay` between lines.
 - To match another buff, find its spell ID with `/campfire buffs`, then `/campfire addbuff <spell ID>`.

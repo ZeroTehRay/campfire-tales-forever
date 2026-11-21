@@ -11,9 +11,9 @@ local DEFAULTS = {
     cooldown  = 300,      -- seconds between stories
     lineDelay = 4,        -- seconds between lines when there is no buff to pace by
     storyLength  = 60,    -- seconds a buff-started story lasts if the buff has no timer
-    buffSpellIds = { 7353 }, -- Cozy Fire (Basic Campfire)
+    buffSpellIds = { 1289723 }, -- campfire buff that starts a story
 }
-local DB_VERSION = 2
+local DB_VERSION = 3
 
 local VALID_CHANNELS = { AUTO = true, SELF = true, PARTY = true, RAID = true, GUILD = true, EMOTE = true }
 local VALID_TRIGGERS = { SIT = true, BUFF = true, ANY = true }
@@ -51,6 +51,10 @@ local function InitDB()
         db.trigger = "BUFF"
         db.channel = "AUTO"
         db.buffNames = nil
+    end
+    -- v3: trigger spell changed from 7353 to 1289723.
+    if (db.version or 1) < 3 then
+        db.buffSpellIds = { 1289723 }
     end
     db.version = DB_VERSION
 end
