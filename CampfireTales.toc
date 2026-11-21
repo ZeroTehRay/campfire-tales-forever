@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: |cffff7f00Campfire Tales|r
+## Notes: Tells a spooky campfire story when you sit down by the fire.
+## Author: You
+## Version: 1.0.0
+## SavedVariables: CampfireTalesDB
+
+Stories.lua
+Core.lua
