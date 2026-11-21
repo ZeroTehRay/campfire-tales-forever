@@ -137,4 +137,15 @@ ns.Stories = {
             "That's why you keep your fire lit at night in the forest. It's not to keep you warm. It's so they can't see your shadow move.",
         },
     },
+    {
+        title = "The Toll at Thandol Span",
+        lines = {
+            "Thandol Span crosses the gorge between the Wetlands and Arathi. The dwarves who built it say every bridge needs a keystone. They never said what this one used.",
+            "Caravan drivers learned to count their crew before crossing. Seven on one side meant seven on the other. That was the rule.",
+            "One foggy night a peddler crossed alone, laughing at the old superstition. Halfway over, he heard footsteps matching his own.",
+            "He stopped. The footsteps took one more step.",
+            "On the far side the guards counted him twice. Once standing in the road... and once hanging under the bridge, looking up at them, waving.",
+            "Crossing the Span soon, {player}? Count your party first. And if the number comes out one higher... don't let the extra one go first.",
+        },
+    },
 }
