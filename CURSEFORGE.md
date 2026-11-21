@@ -30,7 +30,7 @@ Everything to paste into the CurseForge project form. The images are in `media/`
 
 **Pull up a log. Someone's got a story to tell.**
 
-Campfire Tales turns every campfire into a ghost-story circle. When you sit by a fire and get the **Cozy Fire** buff, your character starts telling one of **12 spooky tales** set around Azeroth, such as the gravedigger's lantern on Raven Hill, or the Westfall miner who never stopped digging.
+Campfire Tales turns every campfire into a ghost-story circle. When you sit by a fire and get the **Cozy Fire** buff, your character starts telling one of **13 spooky tales** set around Azeroth, such as the gravedigger's lantern on Raven Hill, or the Westfall miner who never stopped digging.
 
 ## How it works
 
