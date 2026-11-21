@@ -1,6 +1,14 @@
 # Campfire Tales
 
+<img src="media/icon-128.png" alt="Campfire Tales icon" width="96">
+
 A World of Warcraft Forever addon that tells a spooky campfire story when you sit down by the fire.
+
+## How it works
+![Sit down by a campfire](media/1-sit-by-the-fire.png)
+![A spooky story, told over one minute](media/2-story-over-a-minute.png)
+![Who hears it](media/3-who-hears-it.png)
+![One story an hour](media/4-once-an-hour.png)
 
 ## Install
 Copy the `CampfireTales` folder into `World of Warcraft/_forever_/Interface/AddOns/`, then restart or `/reload`.

@@ -3,6 +3,7 @@
 ## Notes: Tells a spooky campfire story when you sit down by the fire.
 ## Author: You
 ## Version: 1.0.0
+## IconTexture: Interface\AddOns\CampfireTales\Icon
 ## SavedVariables: CampfireTalesDB
 
 Stories.lua

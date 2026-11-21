@@ -1,0 +1,6 @@
+package-as: CampfireTales
+
+ignore:
+  - media
+  - CURSEFORGE.md
+  - README.md
