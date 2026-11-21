@@ -6,14 +6,16 @@ local STORY_COLOR = "|cffffd8a0"
 
 local DEFAULTS = {
     enabled   = true,
-    channel   = "SELF",   -- SELF, PARTY, RAID, GUILD, EMOTE
-    trigger   = "ANY",    -- SIT (any time you sit), BUFF (campfire buff gained), ANY (either)
+    channel   = "AUTO",   -- AUTO (party chat in a group, else only you), SELF, PARTY, RAID, GUILD, EMOTE
+    trigger   = "BUFF",   -- BUFF (campfire buff gained), SIT (any time you sit), ANY (either)
     cooldown  = 300,      -- seconds between stories
-    lineDelay = 4,        -- seconds between lines
-    buffNames = { "campfire", "cozy fire" }, -- case-insensitive substrings of the campfire buff
+    lineDelay = 4,        -- seconds between lines when there is no buff to pace by
+    storyLength  = 60,    -- seconds a buff-started story lasts if the buff has no timer
+    buffSpellIds = { 7353 }, -- Cozy Fire (Basic Campfire)
 }
+local DB_VERSION = 2
 
-local VALID_CHANNELS = { SELF = true, PARTY = true, RAID = true, GUILD = true, EMOTE = true }
+local VALID_CHANNELS = { AUTO = true, SELF = true, PARTY = true, RAID = true, GUILD = true, EMOTE = true }
 local VALID_TRIGGERS = { SIT = true, BUFF = true, ANY = true }
 
 local db
@@ -44,34 +46,48 @@ local function InitDB()
             end
         end
     end
+    -- v2: start on spell 7353 and post to party. Older saves kept "ANY"/"SELF".
+    if (db.version or 1) < 2 then
+        db.trigger = "BUFF"
+        db.channel = "AUTO"
+        db.buffNames = nil
+    end
+    db.version = DB_VERSION
 end
 
 ---------------------------------------------------------------------------
 -- Aura helpers (works with both old UnitBuff and newer C_UnitAuras APIs)
 ---------------------------------------------------------------------------
-local function GetBuffName(i)
+-- Returns name, spellId, duration, expirationTime of the player's buff #i.
+local function GetBuffInfo(i)
     if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
         local data = C_UnitAuras.GetBuffDataByIndex("player", i)
-        return data and data.name
+        if not data then return nil end
+        return data.name, data.spellId, data.duration, data.expirationTime
     end
-    return (UnitBuff("player", i))
+    local name, _, _, _, duration, expirationTime, _, _, _, spellId = UnitBuff("player", i)
+    return name, spellId, duration, expirationTime
 end
 
-local function IsCampfireBuff(name)
-    local lower = name:lower()
-    for _, pattern in ipairs(db.buffNames) do
-        if lower:find(pattern:lower(), 1, true) then return true end
+local function IsCampfireBuff(spellId)
+    for _, id in ipairs(db.buffSpellIds) do
+        if id == spellId then return true end
     end
     return false
+end
+
+-- Returns the campfire buff's expiration time (0 if it has none), or nil if not found.
+local function FindCampfireBuff()
+    for i = 1, 40 do
+        local name, spellId, _, expirationTime = GetBuffInfo(i)
+        if not name then return nil end
+        if IsCampfireBuff(spellId) then return expirationTime or 0 end
+    end
+    return nil
 end
 
 local function HasCampfireBuff()
-    for i = 1, 40 do
-        local name = GetBuffName(i)
-        if not name then return false end
-        if IsCampfireBuff(name) then return true end
-    end
-    return false
+    return FindCampfireBuff() ~= nil
 end
 
 ---------------------------------------------------------------------------
@@ -98,6 +114,7 @@ end
 
 local function ResolveChannel()
     local ch = db.channel
+    if ch == "AUTO" then return IsInGroup() and "PARTY" or "SELF" end
     if ch == "PARTY" and not IsInGroup() then return "SELF" end
     if ch == "RAID" and not IsInRaid() then
         return IsInGroup() and "PARTY" or "SELF"
@@ -125,7 +142,8 @@ local function StopStory(reason)
     if reason then Print(reason) end
 end
 
-local function TellStory(story, force)
+-- duration (optional): spread the story evenly over this many seconds.
+local function TellStory(story, force, duration)
     if telling then
         if force then StopStory() else return end
     end
@@ -151,9 +169,15 @@ local function TellStory(story, force)
         end
     end
 
+    local delay = db.lineDelay
+    if duration and #lines > 1 then
+        -- First line now, last line a couple of seconds before the buff runs out.
+        delay = math.max(1, (duration - 2) / (#lines - 1))
+    end
+
     Step()
     if telling then
-        telling.ticker = C_Timer.NewTicker(db.lineDelay, Step)
+        telling.ticker = C_Timer.NewTicker(delay, Step)
     end
 end
 
@@ -174,9 +198,12 @@ local function OnSat()
     end)
 end
 
-local function OnFireBuffGained()
+local function OnFireBuffGained(expirationTime)
     if db.trigger == "SIT" then return end
-    if CanAutoTell() then TellStory() end
+    if not CanAutoTell() then return end
+    local remaining = (expirationTime and expirationTime > 0) and (expirationTime - GetTime()) or 0
+    if remaining < 5 then remaining = db.storyLength end
+    TellStory(nil, false, remaining)
 end
 
 local function MarkStanding()
@@ -235,8 +262,9 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         StopStory("The tale is cut short... something stirs in the dark!")
     elseif event == "UNIT_AURA" then
         if not db then return end
-        local has = HasCampfireBuff()
-        if has and not hadFireBuff then OnFireBuffGained() end
+        local expirationTime = FindCampfireBuff()
+        local has = expirationTime ~= nil
+        if has and not hadFireBuff then OnFireBuffGained(expirationTime) end
         hadFireBuff = has
     end
 end)
@@ -250,18 +278,18 @@ local function Help()
     print("  /campfire stop - stop the current story")
     print("  /campfire list - list all stories")
     print("  /campfire on | off - enable/disable automatic stories")
-    print("  /campfire channel SELF|PARTY|RAID|GUILD|EMOTE")
+    print("  /campfire channel AUTO|SELF|PARTY|RAID|GUILD|EMOTE (AUTO = party chat when grouped)")
     print("  /campfire trigger SIT|BUFF|ANY - what starts a story")
     print("  /campfire cooldown <seconds> | delay <seconds>")
-    print("  /campfire buffs - show your current buffs (find the campfire buff name)")
-    print("  /campfire addbuff <text> | clearbuffs - set campfire buff name matches")
+    print("  /campfire buffs - show your current buffs and their spell IDs")
+    print("  /campfire addbuff <spell ID> | clearbuffs - set which buffs start a story")
     print("  /campfire status")
 end
 
 local function Status()
     Print(("enabled=%s  channel=%s  trigger=%s  cooldown=%ds  delay=%ss"):format(
         tostring(db.enabled), db.channel, db.trigger, db.cooldown, db.lineDelay))
-    print("  campfire buff matches: " .. table.concat(db.buffNames, ", "))
+    print("  campfire buff spell IDs: " .. table.concat(db.buffSpellIds, ", ") .. "  (telling to " .. ResolveChannel() .. ")")
     print("  sitting=" .. tostring(isSitting) .. "  campfire buff=" .. tostring(HasCampfireBuff()))
 end
 
@@ -287,7 +315,7 @@ SlashCmdList.CAMPFIRETALES = function(msg)
         Print("automatic stories " .. (db.enabled and "enabled" or "disabled"))
     elseif cmd == "channel" then
         local ch = rest:upper()
-        if not VALID_CHANNELS[ch] then return Print("channel must be SELF, PARTY, RAID, GUILD or EMOTE") end
+        if not VALID_CHANNELS[ch] then return Print("channel must be AUTO, SELF, PARTY, RAID, GUILD or EMOTE") end
         db.channel = ch
         Print("stories will be told to " .. ch)
     elseif cmd == "trigger" then
@@ -308,16 +336,19 @@ SlashCmdList.CAMPFIRETALES = function(msg)
     elseif cmd == "buffs" then
         Print("your current buffs:")
         for i = 1, 40 do
-            local name = GetBuffName(i)
+            local name, spellId, duration, expirationTime = GetBuffInfo(i)
             if not name then break end
-            print(("  %s%s"):format(name, IsCampfireBuff(name) and "  |cff00ff00<- campfire|r" or ""))
+            local left = (expirationTime and expirationTime > 0) and ("  %ds left"):format(expirationTime - GetTime()) or ""
+            print(("  %s (spell %s)%s%s"):format(name, tostring(spellId), left,
+                IsCampfireBuff(spellId) and "  |cff00ff00<- campfire|r" or ""))
         end
     elseif cmd == "addbuff" then
-        if rest == "" then return Print("usage: /campfire addbuff <part of buff name>") end
-        table.insert(db.buffNames, rest:lower())
-        Print("now matching: " .. table.concat(db.buffNames, ", "))
+        local id = tonumber(rest)
+        if not id then return Print("usage: /campfire addbuff <spell ID>") end
+        table.insert(db.buffSpellIds, id)
+        Print("now matching spell IDs: " .. table.concat(db.buffSpellIds, ", "))
     elseif cmd == "clearbuffs" then
-        db.buffNames = {}
+        db.buffSpellIds = {}
         Print("campfire buff matches cleared")
     elseif cmd == "status" then
         Status()

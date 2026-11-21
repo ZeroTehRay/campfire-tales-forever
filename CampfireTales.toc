@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 11507, 16001
 ## Title: |cffff7f00Campfire Tales|r
 ## Notes: Tells a spooky campfire story when you sit down by the fire.
 ## Author: You
