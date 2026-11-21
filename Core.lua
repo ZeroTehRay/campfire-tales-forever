@@ -60,32 +60,62 @@ local function InitDB()
 end
 
 ---------------------------------------------------------------------------
--- Aura helpers (works with both old UnitBuff and newer C_UnitAuras APIs)
+-- Aura helpers
+-- WoW Forever marks most auras "secret": scanning them by index from an addon
+-- throws "Auras cannot be accessed when secret". Every aura call is wrapped in
+-- pcall, and we ask for our spell IDs directly instead of scanning.
 ---------------------------------------------------------------------------
--- Returns name, spellId, duration, expirationTime of the player's buff #i.
+local IsSecret = issecretvalue or function() return false end
+local lastAuraError -- shown by /campfire buffs
+
+local function SafeAura(fn, ...)
+    if not fn then return nil end
+    local ok, result = pcall(fn, ...)
+    if not ok then lastAuraError = tostring(result); return nil end
+    return result
+end
+
+-- Returns name, spellId, duration, expirationTime of the player's buff #i,
+-- or false if the game won't let us read it.
 local function GetBuffInfo(i)
     if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
-        local data = C_UnitAuras.GetBuffDataByIndex("player", i)
+        local ok, data = pcall(C_UnitAuras.GetBuffDataByIndex, "player", i)
+        if not ok then lastAuraError = tostring(data); return false end
         if not data then return nil end
         return data.name, data.spellId, data.duration, data.expirationTime
     end
-    local name, _, _, _, duration, expirationTime, _, _, _, spellId = UnitBuff("player", i)
+    local ok, name, _, _, _, duration, expirationTime, _, _, _, spellId = pcall(UnitBuff, "player", i)
+    if not ok then lastAuraError = tostring(name); return false end
     return name, spellId, duration, expirationTime
 end
 
 local function IsCampfireBuff(spellId)
+    if spellId == nil or IsSecret(spellId) then return false end
     for _, id in ipairs(db.buffSpellIds) do
         if id == spellId then return true end
     end
     return false
 end
 
--- Returns the campfire buff's expiration time (0 if it has none), or nil if not found.
+local function CleanExpiration(t)
+    if t == nil or IsSecret(t) then return 0 end
+    return t
+end
+
+-- Returns the campfire buff's expiration time (0 if unknown), or nil if not found.
 local function FindCampfireBuff()
+    -- 1) Ask for each spell ID directly (works even when auras are secret).
+    if C_UnitAuras then
+        for _, id in ipairs(db.buffSpellIds) do
+            local data = SafeAura(C_UnitAuras.GetPlayerAuraBySpellID, id)
+            if data then return CleanExpiration(data.expirationTime) end
+        end
+    end
+    -- 2) Fall back to scanning helpful auras, stopping at the first blocked one.
     for i = 1, 40 do
         local name, spellId, _, expirationTime = GetBuffInfo(i)
         if not name then return nil end
-        if IsCampfireBuff(spellId) then return expirationTime or 0 end
+        if IsCampfireBuff(spellId) then return CleanExpiration(expirationTime) end
     end
     return nil
 end
@@ -249,8 +279,9 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterUnitEvent("UNIT_AURA", "player")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 
-frame:SetScript("OnEvent", function(_, event, arg1)
+frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if event == "ADDON_LOADED" then
         if arg1 == ADDON then
             InitDB()
@@ -264,6 +295,9 @@ frame:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_DEAD" then
         MarkStanding()
         StopStory("The tale is cut short... something stirs in the dark!")
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        -- If the ID in the list is the spell you cast (not the buff), start on the cast.
+        if db and IsCampfireBuff(arg3) and not hadFireBuff then OnFireBuffGained(nil) end
     elseif event == "UNIT_AURA" then
         if not db then return end
         local expirationTime = FindCampfireBuff()
@@ -338,14 +372,21 @@ SlashCmdList.CAMPFIRETALES = function(msg)
         db.lineDelay = n
         Print("line delay set to " .. n .. "s")
     elseif cmd == "buffs" then
+        lastAuraError = nil
+        Print("campfire buff (" .. table.concat(db.buffSpellIds, ", ") .. "): " ..
+            (HasCampfireBuff() and "|cff00ff00found|r" or "|cffff4040not found|r"))
         Print("your current buffs:")
         for i = 1, 40 do
             local name, spellId, duration, expirationTime = GetBuffInfo(i)
+            if name == false then print("  (the game is hiding the rest of your buffs from addons)"); break end
             if not name then break end
-            local left = (expirationTime and expirationTime > 0) and ("  %ds left"):format(expirationTime - GetTime()) or ""
-            print(("  %s (spell %s)%s%s"):format(name, tostring(spellId), left,
+            if IsSecret(name) then name = "(hidden)" end
+            local exp = CleanExpiration(expirationTime)
+            local left = exp > 0 and ("  %ds left"):format(exp - GetTime()) or ""
+            print(("  %s (spell %s)%s%s"):format(name, IsSecret(spellId) and "hidden" or tostring(spellId), left,
                 IsCampfireBuff(spellId) and "  |cff00ff00<- campfire|r" or ""))
         end
+        if lastAuraError then print("  last aura error: " .. lastAuraError) end
     elseif cmd == "addbuff" then
         local id = tonumber(rest)
         if not id then return Print("usage: /campfire addbuff <spell ID>") end
