@@ -23,7 +23,7 @@ If the addon shows as "out of date", either tick **Load out of date AddOns** or 
 | `/campfire on` / `off` | Turn automatic stories on or off |
 | `/campfire channel AUTO\|SELF\|PARTY\|RAID\|GUILD\|EMOTE` | Choose who hears the story (default AUTO: party chat when grouped, otherwise only you) |
 | `/campfire trigger BUFF\|SIT\|ANY` | Choose what starts a story (default BUFF) |
-| `/campfire cooldown <sec>` | Minimum time between automatic stories (default 300) |
+| `/campfire cooldown <sec>` | Minimum time between automatic stories (default 3600, one hour; kept across /reload and logout) |
 | `/campfire delay <sec>` | Pause between lines for stories not started by the buff (default 4) |
 | `/campfire buffs` | List your buffs with their spell IDs |
 | `/campfire status` | Show the current settings |

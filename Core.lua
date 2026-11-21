@@ -8,12 +8,12 @@ local DEFAULTS = {
     enabled   = true,
     channel   = "AUTO",   -- AUTO (party chat in a group, else only you), SELF, PARTY, RAID, GUILD, EMOTE
     trigger   = "BUFF",   -- BUFF (campfire buff gained), SIT (any time you sit), ANY (either)
-    cooldown  = 300,      -- seconds between stories
+    cooldown  = 3600,     -- seconds between automatic stories (1 hour, survives /reload and logout)
     lineDelay = 4,        -- seconds between lines when there is no buff to pace by
     storyLength  = 60,    -- seconds a buff-started story lasts if the buff has no timer
     buffSpellIds = { 1229739 }, -- campfire buff that starts a story
 }
-local DB_VERSION = 4
+local DB_VERSION = 5
 
 local VALID_CHANNELS = { AUTO = true, SELF = true, PARTY = true, RAID = true, GUILD = true, EMOTE = true }
 local VALID_TRIGGERS = { SIT = true, BUFF = true, ANY = true }
@@ -21,7 +21,6 @@ local VALID_TRIGGERS = { SIT = true, BUFF = true, ANY = true }
 local db
 local isSitting     = false
 local hadFireBuff   = false
-local lastStoryTime = -math.huge
 local telling       = nil   -- { lines = {...}, index = n, ticker = t }
 local storyBag      = {}
 
@@ -59,6 +58,10 @@ local function InitDB()
     -- v4: corrected trigger spell ID to 1229739.
     if (db.version or 1) < 4 then
         db.buffSpellIds = { 1229739 }
+    end
+    -- v5: one automatic story per hour.
+    if (db.version or 1) < 5 then
+        db.cooldown = 3600
     end
     db.version = DB_VERSION
 end
@@ -192,7 +195,7 @@ local function TellStory(story, force, duration)
     local lines = { "~ " .. Fill(story.title) .. " ~" }
     for _, l in ipairs(story.lines) do lines[#lines + 1] = Fill(l) end
 
-    lastStoryTime = GetTime()
+    if not force then db.lastStoryAt = time() end -- /campfire tell doesn't use up the hour
     telling = { lines = lines, index = 1, channel = channel }
 
     local function Step()
@@ -225,7 +228,7 @@ end
 local function CanAutoTell()
     if not db.enabled or telling then return false end
     if InCombatLockdown() or UnitIsDeadOrGhost("player") then return false end
-    return (GetTime() - lastStoryTime) >= db.cooldown
+    return (time() - (db.lastStoryAt or 0)) >= db.cooldown
 end
 
 local function OnSat()
@@ -331,6 +334,8 @@ end
 local function Status()
     Print(("enabled=%s  channel=%s  trigger=%s  cooldown=%ds  delay=%ss"):format(
         tostring(db.enabled), db.channel, db.trigger, db.cooldown, db.lineDelay))
+    local wait = db.cooldown - (time() - (db.lastStoryAt or 0))
+    print("  next automatic story: " .. (wait > 0 and ("in %d min"):format(math.ceil(wait / 60)) or "ready"))
     print("  campfire buff spell IDs: " .. table.concat(db.buffSpellIds, ", ") .. "  (telling to " .. ResolveChannel() .. ")")
     print("  sitting=" .. tostring(isSitting) .. "  campfire buff=" .. tostring(HasCampfireBuff()))
 end
